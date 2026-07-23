@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Petri — Reaction-Diffusion Studio</title>
+<style>
+  :root{
+    --bg:#0e1414;
+    --panel:#131c1c;
+    --panel-2:#0b1010;
+    --line:#243333;
+    --ink:#cfe0da;
+    --ink-dim:#7f9690;
+    --ink-faint:#4d635e;
+    --accent:#5ee0c0;
+    --accent-dim:#2b6f61;
+    --warn:#e0a15e;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+  #app{display:flex;height:100%;width:100%}
+  #stage{position:relative;flex:1 1 auto;min-width:0;background:
+      radial-gradient(120% 120% at 50% 40%, #101a1a 0%, #080c0c 100%);
+      display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #gl{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  #stage .vignette{position:absolute;inset:0;pointer-events:none;
+      box-shadow:inset 0 0 140px 20px rgba(0,0,0,.55)}
+  .hint{position:absolute;left:16px;bottom:14px;font:11px/1.4 var(--mono);
+      color:var(--ink-faint);letter-spacing:.03em;pointer-events:none;user-select:none}
+  .brand{position:absolute;left:16px;top:14px;pointer-events:none;user-select:none}
+  .brand b{font:600 13px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+  .brand span{display:block;margin-top:4px;font:10px/1 var(--mono);letter-spacing:.22em;color:var(--accent-dim);text-transform:uppercase}
+
+  #panel{flex:0 0 308px;width:308px;background:linear-gradient(180deg,var(--panel),var(--panel-2));
+      border-left:1px solid var(--line);display:flex;flex-direction:column;height:100%}
+  #panel .scroll{overflow-y:auto;padding:14px 14px 26px;flex:1}
+  #panel .scroll::-webkit-scrollbar{width:9px}
+  #panel .scroll::-webkit-scrollbar-thumb{background:#1d2a2a;border-radius:9px;border:2px solid var(--panel)}
+  .head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px}
+  .head h1{margin:0;font:600 12px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase}
+  .head .stat{font:10px/1 var(--mono);color:var(--ink-dim);letter-spacing:.04em}
+
+  .group{border-top:1px solid var(--line);padding:13px 0 4px;margin-top:6px}
+  .group:first-of-type{border-top:0;margin-top:0;padding-top:2px}
+  .group>.gl-title{font:600 10px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);margin:0 0 11px}
+
+  .row{margin:0 0 11px}
+  .row label{display:flex;justify-content:space-between;align-items:baseline;font:11px/1.2 var(--sans);color:var(--ink);margin-bottom:6px}
+  .row label .val{font:11px/1 var(--mono);color:var(--accent);letter-spacing:.02em}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;
+      background:#22302f;outline:none;margin:6px 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;
+      background:var(--accent);cursor:pointer;border:2px solid #0b1010;box-shadow:0 0 0 1px var(--accent-dim)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #0b1010}
+  input[type=range]:focus-visible{box-shadow:0 0 0 2px var(--accent-dim)}
+  input[type=range]:disabled{opacity:.35;cursor:not-allowed}
+
+  select,button{font-family:var(--sans);color:var(--ink);background:#16211f;border:1px solid var(--line);
+      border-radius:7px;padding:8px 10px;font-size:12px;cursor:pointer;transition:border-color .12s,background .12s}
+  select{width:100%;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--ink-dim) 50%),linear-gradient(135deg,var(--ink-dim) 50%,transparent 50%);
+      background-position:calc(100% - 15px) 15px,calc(100% - 10px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+  select:hover,button:hover{border-color:var(--accent-dim)}
+  button:active{background:#1d2c29}
+  button:focus-visible,select:focus-visible{outline:2px solid var(--accent-dim);outline-offset:1px}
+  button:disabled{opacity:.4;cursor:not-allowed}
+
+  .seg{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{border:0;border-radius:0;flex:1;padding:7px 4px;font-size:11px;background:#121b19;color:var(--ink-dim)}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--accent-dim);color:#eafff8}
+
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .btns .wide{grid-column:1 / -1}
+  button.primary{background:var(--accent-dim);border-color:#3a8b7a;color:#eafff8;font-weight:600}
+  button.primary:hover{background:#347f6f}
+
+  .pad-wrap{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0a0f0f}
+  #pad{display:block;width:100%;height:auto;cursor:crosshair;touch-action:none}
+  .pad-axis{position:absolute;font:9px/1 var(--mono);color:var(--ink-faint);letter-spacing:.06em;pointer-events:none}
+  .pad-axis.x{right:6px;bottom:4px}
+  .pad-axis.y{left:5px;top:5px}
+
+  /* gradient editor */
+  .grad-wrap{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0a0f0f}
+  #grad{display:block;width:100%;height:auto;touch-action:none;cursor:pointer}
+  .grad-tools{display:flex;gap:7px;align-items:center;margin-top:8px}
+  .grad-tools input[type=color]{width:34px;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;
+      background:#16211f;cursor:pointer}
+  .grad-tools input[type=color]::-webkit-color-swatch-wrapper{padding:3px}
+  .grad-tools input[type=color]::-webkit-color-swatch{border:0;border-radius:3px}
+  .grad-tools button{flex:1;padding:7px 6px;font-size:11px}
+  .tip{font:9px/1.45 var(--mono);color:var(--ink-faint);letter-spacing:.02em;margin:7px 0 0}
+
+  /* image drop */
+  .drop{border:1px dashed #2c4040;border-radius:8px;padding:14px 10px;text-align:center;
+      font:11px/1.4 var(--sans);color:var(--ink-dim);cursor:pointer;transition:border-color .12s,background .12s}
+  .drop:hover,.drop.over{border-color:var(--accent-dim);background:rgba(94,224,192,.05);color:var(--ink)}
+  .thumb-row{display:flex;gap:9px;align-items:center}
+  .thumb{width:52px;height:52px;border-radius:6px;border:1px solid var(--line);object-fit:cover;flex:0 0 auto;background:#0a0f0f}
+  .thumb-row .meta{font:9px/1.4 var(--mono);color:var(--ink-faint);flex:1;overflow:hidden;text-overflow:ellipsis}
+
+  .foot{border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:8px;align-items:center;background:var(--panel-2)}
+  .foot .mode{font:9px/1.3 var(--mono);color:var(--ink-faint);letter-spacing:.04em;flex:1}
+  .foot .mode b{color:var(--accent-dim)}
+
+  #panelToggle{position:absolute;top:12px;right:12px;z-index:5;display:none;background:rgba(19,28,28,.9)}
+  @media (max-width:860px){
+    #app{flex-direction:column}
+    #panel{position:fixed;right:0;top:0;height:100%;transform:translateX(100%);transition:transform .22s ease;z-index:10;box-shadow:-20px 0 60px rgba(0,0,0,.5)}
+    #panel.open{transform:none}
+    #panelToggle{display:block}
+  }
+  @media (prefers-reduced-motion:reduce){#panel{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div class="vignette"></div>
+    <div class="brand"><b>Petri</b><span>reaction · diffusion</span></div>
+    <div class="hint">drag on canvas to seed · Gray–Scott</div>
+    <button id="panelToggle">controls</button>
+  </div>
+
+  <aside id="panel">
+    <div class="scroll">
+      <div class="head">
+        <h1>Console</h1>
+        <div class="stat" id="fps">—</div>
+      </div>
+
+      <!-- Chemistry -->
+      <div class="group">
+        <p class="gl-title">Chemistry</p>
+        <div class="row">
+          <label>Preset <span class="val" id="presetTag">coral</span></label>
+          <select id="preset"></select>
+        </div>
+        <div class="pad-wrap">
+          <canvas id="pad" width="278" height="180"></canvas>
+          <span class="pad-axis x">kill →</span>
+          <span class="pad-axis y">feed ↑</span>
+        </div>
+        <div class="row" style="margin-top:11px">
+          <label>Feed <span class="val" id="feedVal">0.0545</span></label>
+          <input id="feed" type="range" min="0.005" max="0.09" step="0.0001" value="0.0545">
+        </div>
+        <div class="row">
+          <label>Kill <span class="val" id="killVal">0.0620</span></label>
+          <input id="kill" type="range" min="0.03" max="0.075" step="0.0001" value="0.0620">
+        </div>
+        <div class="row">
+          <label>Spatial drift <span class="val" id="spatialVal">off</span></label>
+          <input id="spatial" type="range" min="0" max="0.03" step="0.001" value="0">
+        </div>
+      </div>
+
+      <!-- Image -->
+      <div class="group">
+        <p class="gl-title">Image chemistry</p>
+        <div id="dropZone" class="drop">Drop an image here, or click to choose</div>
+        <input id="fileIn" type="file" accept="image/*" hidden>
+        <div id="imgPanel" style="display:none">
+          <div class="thumb-row" style="margin-top:10px">
+            <img id="thumb" class="thumb" alt="">
+            <div class="meta" id="imgMeta">—</div>
+            <button id="imgClear" style="flex:0 0 auto;padding:6px 8px">Remove</button>
+          </div>
+          <div class="row" style="margin-top:11px">
+            <label>Feed influence <span class="val" id="imgFeedVal">0.000</span></label>
+            <input id="imgFeed" type="range" min="-0.025" max="0.025" step="0.0005" value="0.012">
+          </div>
+          <div class="row">
+            <label>Kill influence <span class="val" id="imgKillVal">0.000</span></label>
+            <input id="imgKill" type="range" min="-0.02" max="0.02" step="0.0005" value="0.006">
+          </div>
+          <div class="row">
+            <label>Color bleed <span class="val" id="tintVal">0%</span></label>
+            <input id="tint" type="range" min="0" max="1" step="0.01" value="0">
+          </div>
+          <div class="row">
+            <label>Seed threshold <span class="val" id="thrVal">0.50</span></label>
+            <input id="thr" type="range" min="0.05" max="0.95" step="0.01" value="0.5">
+          </div>
+          <button id="seedImg" class="primary" style="width:100%">Grow from image</button>
+        </div>
+      </div>
+
+      <!-- Diffusion -->
+      <div class="group">
+        <p class="gl-title">Diffusion</p>
+        <div class="row">
+          <label>Feed rate A <span class="val" id="dAVal">1.00</span></label>
+          <input id="dA" type="range" min="0.4" max="1.2" step="0.01" value="1.0">
+        </div>
+        <div class="row">
+          <label>Diffuse B <span class="val" id="dBVal">0.50</span></label>
+          <input id="dB" type="range" min="0.2" max="0.8" step="0.01" value="0.5">
+        </div>
+        <div class="row">
+          <label>Time step <span class="val" id="dtVal">1.00</span></label>
+          <input id="dt" type="range" min="0.4" max="1.4" step="0.01" value="1.0">
+        </div>
+        <div class="row">
+          <label>Speed (steps/frame) <span class="val" id="stepsVal">10</span></label>
+          <input id="steps" type="range" min="1" max="30" step="1" value="10">
+        </div>
+      </div>
+
+      <!-- Faceting -->
+      <div class="group">
+        <p class="gl-title">Faceting</p>
+        <div class="row">
+          <label>Angularity <span class="val" id="facetVal">0.00</span></label>
+          <input id="facet" type="range" min="0" max="1" step="0.01" value="0">
+        </div>
+        <div class="row">
+          <label>Corner order <span class="val" id="facetNVal">4</span></label>
+          <input id="facetN" type="range" min="2" max="12" step="1" value="4">
+        </div>
+        <div class="row">
+          <label>Facet angle <span class="val" id="facetAngleVal">0°</span></label>
+          <input id="facetAngle" type="range" min="0" max="360" step="1" value="0">
+        </div>
+        <div class="row">
+          <label>Corner sharpness <span class="val" id="facetSharpVal">0.35</span></label>
+          <input id="facetSharp" type="range" min="0" max="1" step="0.01" value="0.35">
+        </div>
+        <p class="tip">order 4 = right-angle turns · 6 = honeycomb junctions · reseed after changing</p>
+      </div>
+
+      <!-- Material -->
+      <div class="group">
+        <p class="gl-title">Material</p>
+        <div class="row">
+          <label>Surface</label>
+          <div class="seg" id="shade">
+            <button data-v="0">Flat</button>
+            <button data-v="1" class="on">Lit</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Material preset</label>
+          <select id="matPreset">
+            <option value="0">Wet coral</option>
+            <option value="1">Poured enamel</option>
+            <option value="2">Matte ceramic</option>
+            <option value="3">Hammered metal</option>
+            <option value="4">Jade / wax</option>
+            <option value="5">Soft relief</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Relief height <span class="val" id="reliefVal">1.60</span></label>
+          <input id="relief" type="range" min="0" max="6" step="0.05" value="1.6">
+        </div>
+        <div class="row">
+          <label>Light angle <span class="val" id="lightAzVal">135°</span></label>
+          <input id="lightAz" type="range" min="0" max="360" step="1" value="135">
+        </div>
+        <div class="row">
+          <label>Light height <span class="val" id="lightElVal">45°</span></label>
+          <input id="lightEl" type="range" min="5" max="88" step="1" value="45">
+        </div>
+        <div class="row">
+          <label>Gloss <span class="val" id="glossVal">0.45</span></label>
+          <input id="gloss" type="range" min="0" max="1" step="0.01" value="0.45">
+        </div>
+        <div class="row">
+          <label>Ambient <span class="val" id="ambientVal">0.42</span></label>
+          <input id="ambient" type="range" min="0" max="1" step="0.01" value="0.42">
+        </div>
+        <div class="row">
+          <label>Crevice shadow <span class="val" id="aoVal">0.55</span></label>
+          <input id="ao" type="range" min="0" max="1" step="0.01" value="0.55">
+        </div>
+        <div class="row">
+          <label>Subsurface glow <span class="val" id="sssVal">0.25</span></label>
+          <input id="sss" type="range" min="0" max="1.5" step="0.01" value="0.25">
+        </div>
+      </div>
+
+      <!-- Color -->
+      <div class="group">
+        <p class="gl-title">Color ramp</p>
+        <div class="row">
+          <label>Palette</label>
+          <select id="cmap"></select>
+        </div>
+        <div class="grad-wrap"><canvas id="grad" width="278" height="66"></canvas></div>
+        <div class="grad-tools">
+          <input id="stopColor" type="color" value="#ff9c6b" title="Selected stop color">
+          <button id="stopDel">Delete stop</button>
+          <button id="gradRev">Reverse</button>
+        </div>
+        <p class="tip">click ramp to add a stop · drag to move · double-click a stop to delete</p>
+        <div class="row" style="margin-top:12px">
+          <label>Ramp repeats <span class="val" id="repeatVal">1.0</span></label>
+          <input id="repeat" type="range" min="1" max="8" step="0.1" value="1">
+        </div>
+        <div class="row">
+          <label>Read channel</label>
+          <div class="seg" id="channel">
+            <button data-v="0" class="on">B</button>
+            <button data-v="1">A</button>
+            <button data-v="2">A−B</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Contrast <span class="val" id="gainVal">1.00</span></label>
+          <input id="gain" type="range" min="0.5" max="3" step="0.01" value="1.0">
+        </div>
+      </div>
+
+      <!-- Recursion -->
+      <div class="group">
+        <p class="gl-title">Recursion</p>
+        <div class="row">
+          <label>Mode</label>
+          <div class="seg" id="recMode">
+            <button data-v="0" class="on">Off</button>
+            <button data-v="1">Octaves</button>
+            <button data-v="2">Droste</button>
+            <button data-v="3">Both</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Depth <span class="val" id="depthVal">3</span></label>
+          <input id="depth" type="range" min="1" max="6" step="1" value="3">
+        </div>
+        <div class="row">
+          <label>Scale ratio <span class="val" id="ratioVal">2.00</span></label>
+          <input id="ratio" type="range" min="1.2" max="4" step="0.05" value="2">
+        </div>
+        <div class="row">
+          <label>Rotation / level <span class="val" id="recRotVal">0&deg;</span></label>
+          <input id="recRot" type="range" min="0" max="360" step="1" value="0">
+        </div>
+        <div class="row">
+          <label>Persistence <span class="val" id="persistVal">0.55</span></label>
+          <input id="persist" type="range" min="0.1" max="1" step="0.01" value="0.55">
+        </div>
+        <div class="row">
+          <label>Drift X <span class="val" id="driftXVal">0.00</span></label>
+          <input id="driftX" type="range" min="-0.5" max="0.5" step="0.01" value="0">
+        </div>
+        <div class="row">
+          <label>Drift Y <span class="val" id="driftYVal">0.00</span></label>
+          <input id="driftY" type="range" min="-0.5" max="0.5" step="0.01" value="0">
+        </div>
+        <div class="row">
+          <label>Droste twist <span class="val" id="twistVal">0.50</span></label>
+          <input id="twist" type="range" min="-3" max="3" step="0.05" value="0.5">
+        </div>
+        <p class="tip">octaves = self-similar detail at every scale &middot; droste = infinite recursive zoom</p>
+      </div>
+
+      <!-- Edges -->
+      <div class="group">
+        <p class="gl-title">Edges &amp; lines</p>
+        <div class="row">
+          <label>Edge mode</label>
+          <div class="seg" id="edgeMode">
+            <button data-v="0" class="on">Off</button>
+            <button data-v="1">Bands</button>
+            <button data-v="2">Lines</button>
+            <button data-v="3">Both</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Levels <span class="val" id="levelsVal">6</span></label>
+          <input id="levels" type="range" min="2" max="24" step="1" value="6">
+        </div>
+        <div class="row">
+          <label>Edge softness <span class="val" id="softnessVal">0.00</span></label>
+          <input id="softness" type="range" min="0" max="3" step="0.05" value="0">
+        </div>
+        <div class="row">
+          <label>Line width <span class="val" id="lineWidthVal">1.2</span></label>
+          <input id="lineWidth" type="range" min="0.2" max="6" step="0.1" value="1.2">
+        </div>
+        <div class="row">
+          <label>Line opacity <span class="val" id="lineOpacityVal">1.00</span></label>
+          <input id="lineOpacity" type="range" min="0" max="1" step="0.01" value="1">
+        </div>
+        <div class="row">
+          <label>Ink outline <span class="val" id="inkAmtVal">0.00</span></label>
+          <input id="inkAmt" type="range" min="0" max="1" step="0.01" value="0">
+        </div>
+        <div class="row">
+          <label>Outline threshold <span class="val" id="inkThrVal">0.06</span></label>
+          <input id="inkThr" type="range" min="0.005" max="0.3" step="0.005" value="0.06">
+        </div>
+        <div class="row">
+          <label>Line color</label>
+          <input id="lineColor" type="color" value="#0a0d0c" style="width:100%;height:32px;padding:0;border:1px solid var(--line);border-radius:6px;background:#16211f;cursor:pointer">
+        </div>
+        <p class="tip">softness 0 = razor edge · bands+flat surface gives a screen-print look</p>
+      </div>
+
+      <!-- Symmetry -->
+      <div class="group">
+        <p class="gl-title">Symmetry</p>
+        <div class="row">
+          <label>Kaleidoscope order <span class="val" id="symVal">off</span></label>
+          <input id="sym" type="range" min="1" max="14" step="1" value="1">
+        </div>
+        <div class="row">
+          <label>Rotate <span class="val" id="rotVal">0°</span></label>
+          <input id="rot" type="range" min="0" max="360" step="1" value="0">
+        </div>
+        <div class="row">
+          <label>Zoom <span class="val" id="zoomVal">1.00×</span></label>
+          <input id="zoom" type="range" min="0.5" max="3" step="0.01" value="1.0">
+        </div>
+      </div>
+
+      <!-- Field -->
+      <div class="group">
+        <p class="gl-title">Field</p>
+        <div class="row">
+          <label>Resolution</label>
+          <div class="seg" id="res">
+            <button data-v="256">256</button>
+            <button data-v="512" class="on">512</button>
+            <button data-v="1024">1024</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Brush size <span class="val" id="brushVal">3.0%</span></label>
+          <input id="brush" type="range" min="0.5" max="12" step="0.1" value="3">
+        </div>
+        <div class="btns" style="margin-top:12px">
+          <button id="seed">Seed random</button>
+          <button id="clear">Clear</button>
+          <button id="play" class="wide primary">Pause</button>
+          <button id="saveBtn" class="wide">Save PNG</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label>Export scale <span class="val" id="expVal">2×</span></label>
+          <input id="exp" type="range" min="1" max="4" step="1" value="2">
+        </div>
+      </div>
+    </div>
+    <div class="foot"><div class="mode" id="modeLine">precision: <b id="precLbl">—</b></div></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+(function(){
+// ------------------------------------------------------------------ GL setup
+var canvas = document.getElementById('gl');
+var gl = canvas.getContext('webgl', {antialias:false, preserveDrawingBuffer:false, alpha:false})
+      || canvas.getContext('experimental-webgl', {antialias:false, alpha:false});
+if(!gl){ document.body.innerHTML='<p style="color:#cfe0da;font:14px system-ui;padding:40px">WebGL is not available in this browser.</p>'; return; }
+
+var floatExt = gl.getExtension('OES_texture_float');
+var USE_FLOAT = false;
+if(floatExt){
+  var testTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, testTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,4,4,0,gl.RGBA,gl.FLOAT,null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  var testFbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, testFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, testTex, 0);
+  USE_FLOAT = (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(testFbo); gl.deleteTexture(testTex);
+}
+document.getElementById('precLbl').textContent = USE_FLOAT ? 'float32' : 'packed rgba8';
+
+// ------------------------------------------------------------------ shaders
+var VERT = [
+  'attribute vec2 a_pos;',
+  'varying vec2 v_uv;',
+  'void main(){ v_uv = a_pos*0.5 + 0.5; gl_Position = vec4(a_pos,0.0,1.0); }'
+].join('\n');
+
+var CODEC = USE_FLOAT ? [
+  'vec2 getAB(sampler2D s, vec2 uv){ vec4 t = texture2D(s, uv); return t.rg; }',
+  'vec4 packAB(vec2 ab){ return vec4(ab, 0.0, 1.0); }'
+].join('\n') : [
+  'float decf(vec2 c){ return (c.x*255.0*256.0 + c.y*255.0)/65535.0; }',
+  'vec2 encf(float v){ v = clamp(v,0.0,1.0); float e = v*65535.0; float hi = floor(e/256.0); float lo = e - hi*256.0; return vec2(hi,lo)/255.0; }',
+  'vec2 getAB(sampler2D s, vec2 uv){ vec4 t = texture2D(s, uv); return vec2(decf(t.rg), decf(t.ba)); }',
+  'vec4 packAB(vec2 ab){ return vec4(encf(ab.x), encf(ab.y)); }'
+].join('\n');
+
+var PREC = [
+  '#ifdef GL_FRAGMENT_PRECISION_HIGH',
+  'precision highp float;',
+  '#else',
+  'precision mediump float;',
+  '#endif'
+].join('\n');
+
+// SIM: uniforms packed into vec4s to stay well under MAX_FRAGMENT_UNIFORM_VECTORS
+var SIM = [
+  PREC,
+  'uniform sampler2D u_state;',
+  'uniform sampler2D u_mask;',
+  'uniform vec2 u_texel;',
+  'uniform vec4 u_rates;',   // feed, kill, dA, dB
+  'uniform vec4 u_mod;',     // dt, spatial, imgFeed, imgKill
+  'uniform vec4 u_aniso;',   // strength, order N, angle, sharpness
+  'varying vec2 v_uv;',
+  CODEC,
+  'void main(){',
+  '  vec2 uv = v_uv;',
+  '  vec2 c  = getAB(u_state, uv);',
+  '  vec2 nW = getAB(u_state, fract(uv + vec2(-1.0, 0.0)*u_texel));',
+  '  vec2 nE = getAB(u_state, fract(uv + vec2( 1.0, 0.0)*u_texel));',
+  '  vec2 nS = getAB(u_state, fract(uv + vec2( 0.0,-1.0)*u_texel));',
+  '  vec2 nN = getAB(u_state, fract(uv + vec2( 0.0, 1.0)*u_texel));',
+  '  vec2 nSW= getAB(u_state, fract(uv + vec2(-1.0,-1.0)*u_texel));',
+  '  vec2 nSE= getAB(u_state, fract(uv + vec2( 1.0,-1.0)*u_texel));',
+  '  vec2 nNW= getAB(u_state, fract(uv + vec2(-1.0, 1.0)*u_texel));',
+  '  vec2 nNE= getAB(u_state, fract(uv + vec2( 1.0, 1.0)*u_texel));',
+  '  vec2 lap = (nW+nE+nS+nN)*0.20 + (nSW+nSE+nNW+nNE)*0.05 - c;',
+  // faceting: modulate B's diffusion by the local interface normal angle, so
+  // fronts favour N discrete orientations and meet in corners. The modulation is
+  // mean-preserving over angle (average factor is exactly 1), which keeps net
+  // diffusion — and so the Turing regime — intact; scaling the whole Laplacian
+  // instead would just suppress the pattern. B only, so A stays isotropic and
+  // the peak factor stays inside the explicit scheme's stability bound.
+  '  float cN = 0.0;',
+  '  if(u_aniso.x > 0.0){',
+  '    vec2 g = vec2(nE.y - nW.y, nN.y - nS.y);',
+  '    if(dot(g,g) > 1.0e-10){',
+  '      float phi = atan(g.y, g.x);',
+  '      cN = cos(u_aniso.y * (phi - u_aniso.z));',
+  '      cN = clamp(cN * (1.0 + u_aniso.w*5.0), -1.0, 1.0);',
+  '      lap.y *= 1.0 - u_aniso.x*0.5*cN;',
+  '    }',
+  '  }',
+  '  float A = c.x, B = c.y;',
+  '  vec3 img = texture2D(u_mask, uv).rgb;',
+  '  float lum = dot(img, vec3(0.2126, 0.7152, 0.0722));',
+  '  float f = u_rates.x + (uv.x-0.5)*u_mod.y + (lum-0.5)*u_mod.z;',
+  '  float k = u_rates.y + (uv.y-0.5)*u_mod.y + (lum-0.5)*u_mod.w;',
+  '  f = clamp(f, 0.0, 0.12);',
+  '  k = clamp(k, 0.01, 0.10);',
+  '  float rea = A*B*B;',
+  '  float nA = A + (u_rates.z*lap.x - rea + f*(1.0-A))*u_mod.x;',
+  '  float nB = B + (u_rates.w*lap.y + rea - (k+f)*B)*u_mod.x;',
+  '  gl_FragColor = packAB(vec2(clamp(nA,0.0,1.0), clamp(nB,0.0,1.0)));',
+  '}'
+].join('\n');
+
+var SEED = [
+  PREC,
+  'uniform sampler2D u_state;',
+  'uniform vec2 u_point;',
+  'uniform float u_radius;',
+  'varying vec2 v_uv;',
+  CODEC,
+  'void main(){',
+  '  vec2 ab = getAB(u_state, v_uv);',
+  '  vec2 d = v_uv - u_point;',
+  '  d.x = min(min(abs(d.x), abs(d.x-1.0)), abs(d.x+1.0));',
+  '  d.y = min(min(abs(d.y), abs(d.y-1.0)), abs(d.y+1.0));',
+  '  if(length(d) < u_radius){ ab.y = 1.0; }',
+  '  gl_FragColor = packAB(ab);',
+  '}'
+].join('\n');
+
+var DISP = [
+  PREC,
+  'uniform sampler2D u_state;',
+  'uniform sampler2D u_lut;',
+  'uniform sampler2D u_mask;',
+  'uniform vec2 u_texel;',
+  'uniform vec2 u_aspect;',
+  'uniform vec4 u_view;',    // zoom, rot, gain, repeat
+  'uniform vec4 u_light;',   // az, el, gloss, ambient
+  'uniform vec4 u_mat;',     // relief, ao, sss, tint
+  'uniform vec4 u_edge;',    // levels, softness(px), lineWidth(px), lineOpacity
+  'uniform vec4 u_ink;',     // inkAmount, inkThreshold, pxScale, unused
+  'uniform vec4 u_frac;',    // depth, scaleRatio, rotPerLevel, persistence
+  'uniform vec4 u_frac2;',   // driftX, driftY, drosteTwist, mode
+  'uniform vec3 u_lineCol;',
+  'uniform ivec4 u_flags;',  // sym, channel, shade, edgeMode
+  'varying vec2 v_uv;',
+  CODEC,
+  'vec2 rawAB(vec2 uv){ return getAB(u_state, fract(uv)); }',
+  'vec2 smoothAB(vec2 uv){',
+  '  vec2 p = uv/u_texel - 0.5;',
+  '  vec2 i = floor(p); vec2 fr = fract(p);',
+  '  vec2 a = rawAB((i+vec2(0.5,0.5))*u_texel);',
+  '  vec2 b = rawAB((i+vec2(1.5,0.5))*u_texel);',
+  '  vec2 c = rawAB((i+vec2(0.5,1.5))*u_texel);',
+  '  vec2 d = rawAB((i+vec2(1.5,1.5))*u_texel);',
+  '  return mix(mix(a,b,fr.x), mix(c,d,fr.x), fr.y);',
+  '}',
+  'float chan(vec2 ab){',
+  '  if(u_flags.y == 0) return ab.y;',
+  '  else if(u_flags.y == 1) return ab.x;',
+  '  return clamp((ab.x - ab.y)*0.5 + 0.5, 0.0, 1.0);',
+  '}',
+  'float fieldAt(vec2 uv){ return chan(smoothAB(uv)); }',
+  // fBm-style octave sum: the same field resampled through a contractive
+  // similarity, so detail repeats at every scale. Octave 0 keeps bilinear
+  // sampling; finer octaves use nearest, which is both cheaper and adequate
+  // since they are already above the display's resolving frequency.
+  'float heightAt(vec2 uv){',
+  '  float m = u_frac2.w;',
+  '  if(m < 0.5 || (m > 1.5 && m < 2.5)) return fieldAt(uv);',
+  '  vec2 q = uv - 0.5;',
+  '  float ca = cos(u_frac.z), sa = sin(u_frac.z);',
+  '  mat2 R = mat2(ca,-sa,sa,ca);',
+  '  float acc = 0.0, w = 1.0, wsum = 0.0;',
+  '  for(int i=0;i<6;i++){',
+  '    if(float(i) >= u_frac.x) break;',
+  '    float s = (i==0) ? fieldAt(fract(q+0.5)) : chan(rawAB(q+0.5));',
+  '    acc += w*s; wsum += w;',
+  '    q = R*(q*u_frac.y) + u_frac2.xy;',
+  '    w *= u_frac.w;',
+  '  }',
+  '  return clamp(acc/max(wsum, 1.0e-5), 0.0, 1.0);',
+  '}',
+  // posterize into flat bands; aa=0 gives a razor edge, higher blends over ~aa pixels
+  'float quantize(float t, float n, float aa, float gpix){',
+  '  float q = t*n;',
+  '  float fq = floor(q);',
+  '  float fr = q - fq;',
+  '  float w = clamp(aa*gpix*n, 0.0, 0.49);',
+  '  float s = (w > 1.0e-5) ? smoothstep(1.0-w, 1.0, fr) : 0.0;',
+  '  return clamp((fq + s + 0.5)/n, 0.0, 1.0);',
+  '}',
+  // isolines at every band boundary, held to a constant screen-space width
+  'float isoline(float t, float n, float lw, float gpix){',
+  '  float gq = max(gpix*n, 1.0e-6);',   // band boundaries crossed per screen pixel
+  '  float fr = fract(t*n);',
+  '  float d = min(fr, 1.0-fr);',
+  '  float hw = lw*gq*0.5;',             // half-width: lw/2 in pixel units
+  '  float line = 1.0 - smoothstep(hw, hw+gq, d);',
+  // where bands pack below the pixel grid, fade out instead of flooding to solid
+  '  float fade = clamp(1.2 - gq*0.8, 0.0, 1.0);',
+  // a contour only exists where the field actually crosses the level; flat
+  // plateaus sit exactly on a boundary after clamping and must not draw
+  '  float present = smoothstep(0.0, 0.006, gpix);',
+  '  return line * fade * present;',
+  '}',
+  'void main(){',
+  '  vec2 p = (v_uv - 0.5) * u_aspect / u_view.x;',
+  '  float rot = u_view.y;',
+  // Droste: wrap radius modulo one zoom period in log-polar space, so the
+  // image maps onto itself under scaling by the ratio -- infinite recursion.
+  // Shearing log(r) by the angle turns the concentric nesting into a spiral.
+  '  if(u_frac2.w > 1.5){',
+  '    float rr = length(p);',
+  '    if(rr > 1.0e-6){',
+  '      float aa = atan(p.y, p.x);',
+  '      float L = log(max(u_frac.y, 1.0001));',
+  '      float lr = log(rr) + u_frac2.z*aa;',
+  '      lr = lr - L*floor(lr/L) - L;',
+  '      p = exp(lr) * vec2(cos(aa), sin(aa));',
+  '    }',
+  '  }',
+  '  if(u_flags.x > 1){',
+  '    float ang = atan(p.y, p.x) + rot;',
+  '    float rad = length(p);',
+  '    float seg = 6.28318530718 / float(u_flags.x);',
+  '    ang = mod(ang, seg);',
+  '    ang = abs(ang - seg*0.5);',
+  '    p = vec2(cos(ang), sin(ang)) * rad;',
+  '  } else {',
+  '    float ca = cos(rot), sa = sin(rot);',
+  '    p = mat2(ca,-sa,sa,ca) * p;',
+  '  }',
+  '  vec2 suv = fract(p + 0.5);',
+  // height field + normal
+  '  float h  = heightAt(suv);',
+  '  float e  = u_texel.x * 1.5;',
+  '  float hL = heightAt(fract(suv - vec2(e,0.0)));',
+  '  float hR = heightAt(fract(suv + vec2(e,0.0)));',
+  '  float hD = heightAt(fract(suv - vec2(0.0,e)));',
+  '  float hU = heightAt(fract(suv + vec2(0.0,e)));',
+  // color from ramp
+  '  float t = clamp((h-0.5)*u_view.z + 0.5, 0.0, 1.0);',
+  '  t = fract(t * u_view.w);',
+  // screen-space gradient of t, so band/line widths stay constant in pixels
+  '  float gsuv = length(vec2(hR-hL, hU-hD)) / (2.0*e);',
+  '  float gpix = max(gsuv * u_ink.z * u_view.z * u_view.w, 1.0e-7);',
+  '  float tCol = t;',
+  '  float lineMask = 0.0;',
+  '  if(u_flags.w == 1 || u_flags.w == 3) tCol = quantize(t, u_edge.x, u_edge.y, gpix);',
+  '  if(u_flags.w == 2 || u_flags.w == 3) lineMask = isoline(t, u_edge.x, u_edge.z, gpix);',
+  '  vec3 base = texture2D(u_lut, vec2(tCol, 0.5)).rgb;',
+  '  vec3 img = texture2D(u_mask, suv).rgb;',
+  '  vec3 bleed = img * (0.25 + 1.30*tCol);',
+  '  base = mix(base, bleed, u_mat.w);',
+  '  vec3 outc;',
+  '  if(u_flags.z == 0){',
+  '    outc = base;',
+  '  } else {',
+  '    vec3 N = normalize(vec3((hL-hR)*u_mat.x*8.0, (hD-hU)*u_mat.x*8.0, 1.0));',
+  '    float az = u_light.x, el = u_light.y;',
+  '    vec3 L = normalize(vec3(cos(az)*cos(el), sin(az)*cos(el), sin(el)));',
+  '    vec3 V = vec3(0.0,0.0,1.0);',
+  '    vec3 H = normalize(L + V);',
+  '    float diff = max(dot(N,L), 0.0);',
+  '    float shin = mix(6.0, 128.0, u_light.z);',
+  '    float spec = pow(max(dot(N,H), 0.0), shin) * u_light.z;',
+  // curvature-based crevice occlusion
+  '    float curv = (hL+hR+hU+hD)*0.25 - h;',
+  '    float occ  = 1.0 - u_mat.y * clamp(curv*7.0, 0.0, 1.0);',
+  // subsurface: light bleeding through steep thin walls
+  '    float grad = length(vec2(hR-hL, hU-hD));',
+  '    float sss  = u_mat.z * clamp(grad*7.0, 0.0, 1.0) * (0.35 + 0.65*h);',
+  '    outc = base * (u_light.w + diff) * occ;',
+  '    outc += base * sss * 1.4;',
+  '    outc += vec3(spec);',
+  '  }',
+  // ink outline traces steep chemical boundaries, independent of banding
+  '  float gradT = length(vec2(hR-hL, hU-hD));',
+  '  float ink = u_ink.x * smoothstep(u_ink.y, u_ink.y + 0.12, gradT);',
+  '  float lmask = clamp(max(lineMask*u_edge.w, ink), 0.0, 1.0);',
+  '  outc = mix(outc, u_lineCol, lmask);',
+  '  gl_FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);',
+  '}'
+].join('\n');
+
+// ------------------------------------------------------------------ gl helpers
+function compile(type, src){
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(fragSrc){
+  var p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc));
+  gl.bindAttribLocation(p, 0, 'a_pos');
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+var progSim = program(SIM), progSeed = program(SEED), progDisp = program(DISP);
+
+var quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+function uni(p, n){ return gl.getUniformLocation(p, n); }
+
+// ------------------------------------------------------------------ state field
+var RES = 512;
+var texA, texB, fboA, fboB, texType;
+
+function makeTex(res){
+  var t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, res, res, 0, gl.RGBA, texType, null);
+  return t;
+}
+function makeFbo(tex){
+  var f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return f;
+}
+function encFloatBytes(v){
+  v = Math.min(1, Math.max(0, v));
+  var e = Math.round(v*65535);
+  var hi = Math.floor(e/256), lo = e - hi*256;
+  return [hi, lo];
+}
+
+// mode: 'blank' | 'random' | 'image'
+function initData(res, mode){
+  var n = res*res, data, i;
+  if(USE_FLOAT){
+    data = new Float32Array(n*4);
+    for(i=0;i<n;i++){ data[i*4]=1.0; data[i*4+1]=0.0; data[i*4+2]=0.0; data[i*4+3]=1.0; }
+  } else {
+    data = new Uint8Array(n*4);
+    var one = encFloatBytes(1.0), zero = encFloatBytes(0.0);
+    for(i=0;i<n;i++){ data[i*4]=one[0]; data[i*4+1]=one[1]; data[i*4+2]=zero[0]; data[i*4+3]=zero[1]; }
+  }
+  function setB(idx){
+    if(USE_FLOAT){ data[idx+1]=1.0; }
+    else { var o=encFloatBytes(1.0); data[idx+2]=o[0]; data[idx+3]=o[1]; }
+  }
+  if(mode==='random'){
+    for(var s=0;s<7;s++){
+      var cx = Math.floor(Math.random()*res), cy = Math.floor(Math.random()*res);
+      var r = Math.floor(res*0.02) + 3;
+      for(var y=-r;y<=r;y++) for(var x=-r;x<=r;x++){
+        if(x*x+y*y>r*r) continue;
+        var px=((cx+x)%res+res)%res, py=((cy+y)%res+res)%res;
+        setB((py*res+px)*4);
+      }
+    }
+  } else if(mode==='image' && imgLum){
+    var thr = P.thr;
+    for(var q=0;q<n;q++){ if(imgLum[q] < thr) setB(q*4); }
+  }
+  return data;
+}
+function uploadInit(mode){
+  var data = initData(RES, mode);
+  gl.bindTexture(gl.TEXTURE_2D, texA);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, RES, RES, 0, gl.RGBA, texType, data);
+  gl.bindTexture(gl.TEXTURE_2D, texB);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, RES, RES, 0, gl.RGBA, texType, data);
+}
+function buildField(res, mode){
+  RES = res;
+  texType = USE_FLOAT ? gl.FLOAT : gl.UNSIGNED_BYTE;
+  if(texA){ gl.deleteTexture(texA); gl.deleteTexture(texB); gl.deleteFramebuffer(fboA); gl.deleteFramebuffer(fboB); }
+  texA = makeTex(res); texB = makeTex(res);
+  fboA = makeFbo(texA); fboB = makeFbo(texB);
+  if(imgEl) rasterizeImage(res);
+  uploadInit(mode);
+}
+
+// ------------------------------------------------------------------ params
+var P = {
+  feed:0.0545, kill:0.0620, dA:1.0, dB:0.5, dt:1.0, steps:10, spatial:0,
+  facet:0, facetN:4, facetAngle:0, facetSharp:0.35,
+  imgFeed:0.012, imgKill:0.006, tint:0, thr:0.5,
+  shade:1, relief:1.6, lightAz:135, lightEl:45, gloss:0.45, ambient:0.42, ao:0.55, sss:0.25,
+  sym:1, rot:0, zoom:1.0, channel:0, gain:1.0, repeat:1.0,
+  recMode:0, depth:3, ratio:2.0, recRot:0, persist:0.55, driftX:0, driftY:0, twist:0.5,
+  edgeMode:0, levels:6, softness:0.0, lineWidth:1.2, lineOpacity:1.0,
+  lineColor:'#0a0d0c', inkAmt:0.0, inkThr:0.06,
+  brush:3.0, exp:2, running:true
+};
+function hexRGB(h){
+  var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h);
+  if(!m) return [0,0,0];
+  return [parseInt(m[1],16)/255, parseInt(m[2],16)/255, parseInt(m[3],16)/255];
+}
+
+// ------------------------------------------------------------------ color ramp (LUT)
+var PALETTES = [
+  ['Coral bloom',    [[0,'#140611'],[0.32,'#7a2246'],[0.62,'#ef7452'],[0.85,'#ffc48a'],[1,'#fff4e2']]],
+  ['Bioluminescence',[[0,'#01080e'],[0.35,'#04364d'],[0.65,'#12b6c4'],[0.86,'#7ff5de'],[1,'#f2fffb']]],
+  ['Magma',          [[0,'#08040c'],[0.3,'#5c0a2a'],[0.58,'#c92d18'],[0.8,'#f5a022'],[1,'#fff2c4']]],
+  ['Ink & bone',     [[0,'#07090a'],[0.5,'#5a6467'],[0.82,'#c8c6bd'],[1,'#f6f3e9']]],
+  ['Spectral',       [[0,'#241a53'],[0.25,'#1e78b4'],[0.5,'#35b77a'],[0.75,'#f2d047'],[1,'#e0492f']]],
+  ['Verdigris',      [[0,'#0a1210'],[0.36,'#1c4a41'],[0.66,'#4e9f86'],[0.86,'#a8d8c0'],[1,'#eef7ef']]],
+  ['Nacre',          [[0,'#171a2e'],[0.28,'#5c6ba8'],[0.5,'#c39bd0'],[0.7,'#8fd9d2'],[0.87,'#f7d9bd'],[1,'#fdfaf6']]],
+  ['Oxblood',        [[0,'#0c0405'],[0.42,'#4a0d13'],[0.72,'#a3232a'],[0.9,'#d97a5c'],[1,'#f2ddc8']]]
+];
+var stops = PALETTES[0][1].map(function(s){ return {t:s[0], c:s[1]}; });
+var selStop = 0;
+
+var lutCanvas = document.createElement('canvas');
+lutCanvas.width = 256; lutCanvas.height = 1;
+var lutCtx = lutCanvas.getContext('2d');
+var lutTex = gl.createTexture();
+
+function buildLUT(){
+  stops.sort(function(a,b){ return a.t-b.t; });
+  var g = lutCtx.createLinearGradient(0,0,256,0);
+  for(var i=0;i<stops.length;i++){
+    g.addColorStop(Math.min(1,Math.max(0,stops[i].t)), stops[i].c);
+  }
+  lutCtx.clearRect(0,0,256,1);
+  lutCtx.fillStyle = g; lutCtx.fillRect(0,0,256,1);
+  gl.bindTexture(gl.TEXTURE_2D, lutTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, lutCanvas);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+}
+
+// ------------------------------------------------------------------ image mask
+var maskTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, maskTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+var imgEl = null, imgLum = null;
+var imgCanvas = document.createElement('canvas');
+var imgCtx = imgCanvas.getContext('2d');
+
+function rasterizeImage(res){
+  if(!imgEl) return;
+  imgCanvas.width = res; imgCanvas.height = res;
+  imgCtx.fillStyle = '#808080'; imgCtx.fillRect(0,0,res,res);
+  // cover-fit
+  var iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+  var scale = Math.max(res/iw, res/ih);
+  var dw = iw*scale, dh = ih*scale;
+  imgCtx.drawImage(imgEl, (res-dw)/2, (res-dh)/2, dw, dh);
+  gl.bindTexture(gl.TEXTURE_2D, maskTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imgCanvas);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  // luminance array in texture orientation (flipped Y) for CPU-side seeding
+  var d = imgCtx.getImageData(0,0,res,res).data;
+  imgLum = new Float32Array(res*res);
+  for(var y=0;y<res;y++){
+    var sy = res-1-y;
+    for(var x=0;x<res;x++){
+      var si = (sy*res+x)*4;
+      imgLum[y*res+x] = (0.2126*d[si] + 0.7152*d[si+1] + 0.0722*d[si+2])/255;
+    }
+  }
+}
+function clearImage(){
+  imgEl = null; imgLum = null;
+  gl.bindTexture(gl.TEXTURE_2D, maskTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+}
+
+// ------------------------------------------------------------------ passes
+function simStep(){
+  gl.useProgram(progSim);
+  gl.viewport(0,0,RES,RES);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texA);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, maskTex);
+  gl.uniform1i(uni(progSim,'u_state'), 0);
+  gl.uniform1i(uni(progSim,'u_mask'), 1);
+  gl.uniform2f(uni(progSim,'u_texel'), 1/RES, 1/RES);
+  gl.uniform4f(uni(progSim,'u_rates'), P.feed, P.kill, P.dA, P.dB);
+  var hasImg = imgEl ? 1 : 0;
+  gl.uniform4f(uni(progSim,'u_mod'), P.dt, P.spatial, P.imgFeed*hasImg, P.imgKill*hasImg);
+  gl.uniform4f(uni(progSim,'u_aniso'), P.facet, P.facetN, P.facetAngle*Math.PI/180, P.facetSharp);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  var t=texA; texA=texB; texB=t; var f=fboA; fboA=fboB; fboB=f;
+}
+
+function seedAt(ux, uy){
+  gl.useProgram(progSeed);
+  gl.viewport(0,0,RES,RES);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texA);
+  gl.uniform1i(uni(progSeed,'u_state'), 0);
+  gl.uniform2f(uni(progSeed,'u_point'), ux, uy);
+  gl.uniform1f(uni(progSeed,'u_radius'), P.brush/100);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  var t=texA; texA=texB; texB=t; var f=fboA; fboA=fboB; fboB=f;
+}
+
+function display(targetFbo, w, h){
+  gl.useProgram(progDisp);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, targetFbo);
+  gl.viewport(0,0,w,h);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texA);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, lutTex);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, maskTex);
+  gl.uniform1i(uni(progDisp,'u_state'), 0);
+  gl.uniform1i(uni(progDisp,'u_lut'), 1);
+  gl.uniform1i(uni(progDisp,'u_mask'), 2);
+  gl.uniform2f(uni(progDisp,'u_texel'), 1/RES, 1/RES);
+  var asp = w>h ? [w/h,1] : [1,h/w];
+  gl.uniform2f(uni(progDisp,'u_aspect'), asp[0], asp[1]);
+  gl.uniform4f(uni(progDisp,'u_view'), P.zoom, P.rot*Math.PI/180, P.gain, P.repeat);
+  gl.uniform4f(uni(progDisp,'u_light'), P.lightAz*Math.PI/180, P.lightEl*Math.PI/180, P.gloss, P.ambient);
+  gl.uniform4f(uni(progDisp,'u_mat'), P.relief, P.ao, P.sss, imgEl ? P.tint : 0);
+  gl.uniform4f(uni(progDisp,'u_edge'), Math.max(2,P.levels), P.softness, P.lineWidth, P.lineOpacity);
+  // pxScale: how much sim-uv advances per screen pixel (isotropic under this projection)
+  var pxScale = 1/(P.zoom * Math.max(1, Math.min(w,h)));
+  gl.uniform4f(uni(progDisp,'u_ink'), P.inkAmt, P.inkThr, pxScale, 0);
+  gl.uniform4f(uni(progDisp,'u_frac'), P.depth, P.ratio, P.recRot*Math.PI/180, P.persist);
+  gl.uniform4f(uni(progDisp,'u_frac2'), P.driftX, P.driftY, P.twist, P.recMode);
+  var lc = hexRGB(P.lineColor);
+  gl.uniform3f(uni(progDisp,'u_lineCol'), lc[0], lc[1], lc[2]);
+  gl.uniform4i(uni(progDisp,'u_flags'), P.sym|0, P.channel|0, P.shade|0, P.edgeMode|0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// ------------------------------------------------------------------ loop
+var vw=1, vh=1, dpr=1;
+function resize(){
+  dpr = Math.min(window.devicePixelRatio||1, 2);
+  var r = canvas.getBoundingClientRect();
+  vw = Math.max(1, Math.round(r.width*dpr));
+  vh = Math.max(1, Math.round(r.height*dpr));
+  canvas.width = vw; canvas.height = vh;
+}
+window.addEventListener('resize', resize);
+
+var last=performance.now(), acc=0, frames=0, fpsEl=document.getElementById('fps');
+function frame(now){
+  if(P.running){ for(var i=0;i<P.steps;i++) simStep(); }
+  display(null, vw, vh);
+  frames++; acc += now-last; last=now;
+  if(acc>500){ fpsEl.textContent = Math.round(frames*1000/acc)+' fps'; frames=0; acc=0; }
+  requestAnimationFrame(frame);
+}
+
+// ------------------------------------------------------------------ pointer seeding
+var seeding=false;
+function pointerUV(ev){
+  var r = canvas.getBoundingClientRect();
+  var sx = (ev.clientX - r.left)/r.width;
+  var sy = (ev.clientY - r.top)/r.height;
+  var vx = sx, vy = 1.0 - sy;
+  var asp = vw>vh ? [vw/vh,1] : [1,vh/vw];
+  var px = (vx-0.5)*asp[0]/P.zoom;
+  var py = (vy-0.5)*asp[1]/P.zoom;
+  var rot = P.rot*Math.PI/180;
+  var ca = Math.cos(rot), sa = Math.sin(rot);
+  if(P.sym > 1){
+    var ang = Math.atan2(py, px) + rot;
+    var rad = Math.sqrt(px*px + py*py);
+    var seg = 2.0*Math.PI/P.sym;
+    ang = ang - Math.floor(ang/seg)*seg;
+    ang = Math.abs(ang - seg*0.5);
+    px = Math.cos(ang)*rad; py = Math.sin(ang)*rad;
+  } else {
+    var nx = ca*px + sa*py, ny = -sa*px + ca*py;
+    px = nx; py = ny;
+  }
+  var u = px + 0.5, v = py + 0.5;
+  u = u - Math.floor(u); v = v - Math.floor(v);
+  return [u, v];
+}
+canvas.addEventListener('pointerdown', function(ev){ seeding=true; canvas.setPointerCapture(ev.pointerId); var uv=pointerUV(ev); seedAt(uv[0],uv[1]); });
+canvas.addEventListener('pointermove', function(ev){ if(!seeding) return; var uv=pointerUV(ev); seedAt(uv[0],uv[1]); });
+canvas.addEventListener('pointerup', function(){ seeding=false; });
+canvas.addEventListener('pointercancel', function(){ seeding=false; });
+
+// ------------------------------------------------------------------ presets
+var PRESETS = [
+  ['Coral',        0.0545, 0.0620],
+  ['Mitosis',      0.0367, 0.0649],
+  ['Spots',        0.0300, 0.0620],
+  ['Worms',        0.0580, 0.0630],
+  ['Maze',         0.0290, 0.0570],
+  ['Holes',        0.0390, 0.0580],
+  ['Fingerprint',  0.0550, 0.0620],
+  ['Chaos',        0.0260, 0.0510],
+  ['Pulsing waves',0.0140, 0.0450]
+];
+var presetSel = document.getElementById('preset');
+PRESETS.forEach(function(p,i){ var o=document.createElement('option'); o.value=i; o.textContent=p[0]; presetSel.appendChild(o); });
+
+var MATERIALS = [
+  ['Wet coral',      {relief:1.6, gloss:0.55, ambient:0.40, ao:0.60, sss:0.35, lightEl:45}],
+  ['Poured enamel',  {relief:2.6, gloss:0.90, ambient:0.30, ao:0.45, sss:0.10, lightEl:38}],
+  ['Matte ceramic',  {relief:1.9, gloss:0.10, ambient:0.52, ao:0.70, sss:0.05, lightEl:55}],
+  ['Hammered metal', {relief:3.4, gloss:0.78, ambient:0.18, ao:0.85, sss:0.00, lightEl:25}],
+  ['Jade / wax',     {relief:1.2, gloss:0.35, ambient:0.45, ao:0.35, sss:1.05, lightEl:60}],
+  ['Soft relief',    {relief:0.9, gloss:0.18, ambient:0.60, ao:0.40, sss:0.15, lightEl:50}]
+];
+var matSel = document.getElementById('matPreset');
+
+var cmapSel = document.getElementById('cmap');
+PALETTES.forEach(function(p,i){ var o=document.createElement('option'); o.value=i; o.textContent=p[0]; cmapSel.appendChild(o); });
+
+// ------------------------------------------------------------------ param pad
+var pad = document.getElementById('pad'), pctx = pad.getContext('2d');
+var K_MIN=0.03, K_MAX=0.075, F_MIN=0.005, F_MAX=0.09;
+function padDraw(){
+  var w=pad.width, h=pad.height;
+  pctx.clearRect(0,0,w,h);
+  pctx.fillStyle='#0a0f0f'; pctx.fillRect(0,0,w,h);
+  var g = pctx.createRadialGradient(w*0.52,h*0.55,10,w*0.52,h*0.55,w*0.7);
+  g.addColorStop(0,'rgba(94,224,192,0.10)'); g.addColorStop(1,'rgba(94,224,192,0)');
+  pctx.fillStyle=g; pctx.fillRect(0,0,w,h);
+  pctx.strokeStyle='rgba(36,51,51,0.9)'; pctx.lineWidth=1;
+  for(var gx=0;gx<=4;gx++){ var xx=gx/4*w; pctx.beginPath(); pctx.moveTo(xx,0); pctx.lineTo(xx,h); pctx.stroke(); }
+  for(var gy=0;gy<=4;gy++){ var yy=gy/4*h; pctx.beginPath(); pctx.moveTo(0,yy); pctx.lineTo(w,yy); pctx.stroke(); }
+  PRESETS.forEach(function(p){
+    var px=(p[2]-K_MIN)/(K_MAX-K_MIN)*w;
+    var py=(1-(p[1]-F_MIN)/(F_MAX-F_MIN))*h;
+    pctx.fillStyle='rgba(127,150,144,0.55)';
+    pctx.beginPath(); pctx.arc(px,py,2,0,6.2832); pctx.fill();
+  });
+  var cx=(P.kill-K_MIN)/(K_MAX-K_MIN)*w;
+  var cy=(1-(P.feed-F_MIN)/(F_MAX-F_MIN))*h;
+  pctx.strokeStyle='rgba(94,224,192,0.5)'; pctx.lineWidth=1;
+  pctx.beginPath(); pctx.moveTo(cx-7,cy); pctx.lineTo(cx+7,cy); pctx.moveTo(cx,cy-7); pctx.lineTo(cx,cy+7); pctx.stroke();
+  pctx.fillStyle='#5ee0c0'; pctx.beginPath(); pctx.arc(cx,cy,3.5,0,6.2832); pctx.fill();
+  pctx.strokeStyle='#0b1010'; pctx.lineWidth=1.5; pctx.stroke();
+}
+function padSet(ev){
+  var r=pad.getBoundingClientRect();
+  var x=(ev.clientX-r.left)/r.width, y=(ev.clientY-r.top)/r.height;
+  x=Math.min(1,Math.max(0,x)); y=Math.min(1,Math.max(0,y));
+  P.kill = K_MIN + x*(K_MAX-K_MIN);
+  P.feed = F_MIN + (1-y)*(F_MAX-F_MIN);
+  syncChem(); padDraw();
+}
+var padding=false;
+pad.addEventListener('pointerdown', function(ev){ padding=true; pad.setPointerCapture(ev.pointerId); padSet(ev); });
+pad.addEventListener('pointermove', function(ev){ if(padding) padSet(ev); });
+pad.addEventListener('pointerup', function(){ padding=false; });
+
+// ------------------------------------------------------------------ gradient editor
+var grad = document.getElementById('grad'), gctx = grad.getContext('2d');
+var GRAD_PAD = 10, RAMP_H = 34, HANDLE_Y = 50;
+
+function gradX(t){ return GRAD_PAD + t*(grad.width - GRAD_PAD*2); }
+function gradT(x){ return Math.min(1, Math.max(0, (x - GRAD_PAD)/(grad.width - GRAD_PAD*2))); }
+
+function sampleLUT(t){
+  var d = lutCtx.getImageData(Math.min(255, Math.max(0, Math.round(t*255))), 0, 1, 1).data;
+  return '#' + [d[0],d[1],d[2]].map(function(v){ return ('0'+v.toString(16)).slice(-2); }).join('');
+}
+function gradDraw(){
+  var w=grad.width, h=grad.height;
+  gctx.clearRect(0,0,w,h);
+  // checker-free dark bed
+  gctx.fillStyle='#0a0f0f'; gctx.fillRect(0,0,w,h);
+  // ramp
+  var g = gctx.createLinearGradient(gradX(0), 0, gradX(1), 0);
+  for(var i=0;i<stops.length;i++) g.addColorStop(Math.min(1,Math.max(0,stops[i].t)), stops[i].c);
+  gctx.fillStyle = g;
+  gctx.fillRect(gradX(0), 8, gradX(1)-gradX(0), RAMP_H);
+  gctx.strokeStyle='#243333'; gctx.lineWidth=1;
+  gctx.strokeRect(gradX(0)+0.5, 8.5, gradX(1)-gradX(0)-1, RAMP_H-1);
+  // handles
+  for(var j=0;j<stops.length;j++){
+    var x = gradX(stops[j].t);
+    var on = (j===selStop);
+    gctx.beginPath();
+    gctx.moveTo(x, HANDLE_Y-6); gctx.lineTo(x-5, HANDLE_Y+2); gctx.lineTo(x+5, HANDLE_Y+2);
+    gctx.closePath();
+    gctx.fillStyle = on ? '#5ee0c0' : '#7f9690';
+    gctx.fill();
+    gctx.beginPath();
+    gctx.arc(x, HANDLE_Y+8, on?5.5:4.5, 0, 6.2832);
+    gctx.fillStyle = stops[j].c; gctx.fill();
+    gctx.strokeStyle = on ? '#5ee0c0' : '#243333'; gctx.lineWidth = on?2:1; gctx.stroke();
+  }
+}
+function refreshRamp(){ buildLUT(); gradDraw(); }
+
+var dragStop = -1;
+function hitStop(x){
+  var best=-1, bd=11;
+  for(var i=0;i<stops.length;i++){
+    var d = Math.abs(gradX(stops[i].t) - x);
+    if(d < bd){ bd=d; best=i; }
+  }
+  return best;
+}
+grad.addEventListener('pointerdown', function(ev){
+  var r = grad.getBoundingClientRect();
+  var x = (ev.clientX-r.left) * (grad.width/r.width);
+  var y = (ev.clientY-r.top) * (grad.height/r.height);
+  var hit = (y > RAMP_H) ? hitStop(x) : -1;
+  if(hit >= 0){
+    selStop = hit; dragStop = hit;
+    grad.setPointerCapture(ev.pointerId);
+    document.getElementById('stopColor').value = stops[hit].c;
+    gradDraw();
+  } else {
+    // add a stop at this position, colored from the current ramp
+    var t = gradT(x);
+    stops.push({t:t, c:sampleLUT(t)});
+    stops.sort(function(a,b){ return a.t-b.t; });
+    for(var i=0;i<stops.length;i++){ if(Math.abs(stops[i].t-t)<1e-9){ selStop=i; break; } }
+    dragStop = selStop;
+    grad.setPointerCapture(ev.pointerId);
+    document.getElementById('stopColor').value = stops[selStop].c;
+    refreshRamp();
+  }
+});
+grad.addEventListener('pointermove', function(ev){
+  if(dragStop < 0) return;
+  var r = grad.getBoundingClientRect();
+  var x = (ev.clientX-r.left) * (grad.width/r.width);
+  var moving = stops[dragStop];
+  moving.t = gradT(x);
+  stops.sort(function(a,b){ return a.t-b.t; });
+  selStop = stops.indexOf(moving); dragStop = selStop;
+  refreshRamp();
+});
+grad.addEventListener('pointerup', function(){ dragStop = -1; });
+grad.addEventListener('pointercancel', function(){ dragStop = -1; });
+grad.addEventListener('dblclick', function(ev){
+  var r = grad.getBoundingClientRect();
+  var x = (ev.clientX-r.left) * (grad.width/r.width);
+  var y = (ev.clientY-r.top) * (grad.height/r.height);
+  if(y <= RAMP_H) return;
+  var hit = hitStop(x);
+  if(hit >= 0 && stops.length > 2){
+    stops.splice(hit,1);
+    selStop = Math.max(0, Math.min(selStop, stops.length-1));
+    document.getElementById('stopColor').value = stops[selStop].c;
+    refreshRamp();
+  }
+});
+document.getElementById('stopColor').addEventListener('input', function(){
+  if(stops[selStop]){ stops[selStop].c = this.value; refreshRamp(); }
+});
+document.getElementById('stopDel').addEventListener('click', function(){
+  if(stops.length > 2){
+    stops.splice(selStop,1);
+    selStop = Math.max(0, Math.min(selStop, stops.length-1));
+    document.getElementById('stopColor').value = stops[selStop].c;
+    refreshRamp();
+  }
+});
+document.getElementById('gradRev').addEventListener('click', function(){
+  stops = stops.map(function(s){ return {t:1-s.t, c:s.c}; });
+  stops.sort(function(a,b){ return a.t-b.t; });
+  selStop = 0;
+  document.getElementById('stopColor').value = stops[0].c;
+  refreshRamp();
+});
+cmapSel.addEventListener('change', function(){
+  stops = PALETTES[parseInt(this.value,10)][1].map(function(s){ return {t:s[0], c:s[1]}; });
+  selStop = 0;
+  document.getElementById('stopColor').value = stops[0].c;
+  refreshRamp();
+});
+
+// ------------------------------------------------------------------ UI wiring
+function $(id){ return document.getElementById(id); }
+var BINDINGS = [];
+function bindRange(id, key, fmt, after){
+  var el=$(id), out=$(id+'Val');
+  if(!el) return;
+  BINDINGS.push({id:id, key:key, fmt:fmt, el:el, out:out});
+  el.addEventListener('input', function(){
+    P[key] = parseFloat(el.value);
+    if(out) out.textContent = fmt(P[key]);
+    if(after) after();
+  });
+}
+function syncAll(){
+  for(var i=0;i<BINDINGS.length;i++){
+    var b = BINDINGS[i];
+    b.el.value = P[b.key];
+    if(b.out) b.out.textContent = b.fmt(P[b.key]);
+  }
+}
+var f2=function(v){return v.toFixed(2);};
+var f3=function(v){return v.toFixed(3);};
+var f4=function(v){return v.toFixed(4);};
+var deg=function(v){return (v|0)+'°';};
+
+bindRange('feed','feed',f4, padDraw);
+bindRange('kill','kill',f4, padDraw);
+bindRange('spatial','spatial',function(v){return v<=0?'off':'±'+v.toFixed(3);});
+bindRange('imgFeed','imgFeed',f3);
+bindRange('imgKill','imgKill',f3);
+bindRange('tint','tint',function(v){return Math.round(v*100)+'%';});
+bindRange('thr','thr',f2);
+bindRange('dA','dA',f2);
+bindRange('dB','dB',f2);
+bindRange('dt','dt',f2);
+bindRange('steps','steps',function(v){return String(v|0);});
+bindRange('facet','facet',f2);
+bindRange('facetN','facetN',function(v){return String(v|0);});
+bindRange('facetAngle','facetAngle',deg);
+bindRange('facetSharp','facetSharp',f2);
+bindRange('relief','relief',f2);
+bindRange('lightAz','lightAz',deg);
+bindRange('lightEl','lightEl',deg);
+bindRange('gloss','gloss',f2);
+bindRange('ambient','ambient',f2);
+bindRange('ao','ao',f2);
+bindRange('sss','sss',f2);
+bindRange('sym','sym',function(v){return v<=1?'off':(v+'-fold');}, function(){P.sym=P.sym|0;});
+bindRange('rot','rot',deg);
+bindRange('zoom','zoom',function(v){return v.toFixed(2)+'×';});
+bindRange('gain','gain',f2);
+bindRange('repeat','repeat',function(v){return v.toFixed(1);});
+bindRange('depth','depth',function(v){return String(v|0);});
+bindRange('ratio','ratio',f2);
+bindRange('recRot','recRot',deg);
+bindRange('persist','persist',f2);
+bindRange('driftX','driftX',f2);
+bindRange('driftY','driftY',f2);
+bindRange('twist','twist',f2);
+bindRange('levels','levels',function(v){return String(v|0);});
+bindRange('softness','softness',f2);
+bindRange('lineWidth','lineWidth',function(v){return v.toFixed(1);});
+bindRange('lineOpacity','lineOpacity',f2);
+bindRange('inkAmt','inkAmt',f2);
+bindRange('inkThr','inkThr',function(v){return v.toFixed(3);});
+bindRange('brush','brush',function(v){return v.toFixed(1)+'%';});
+bindRange('exp','exp',function(v){return (v|0)+'×';});
+
+function segGroup(id, key){
+  var box=$(id);
+  box.addEventListener('click', function(ev){
+    var b=ev.target.closest('button'); if(!b) return;
+    [].forEach.call(box.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    P[key]=parseInt(b.getAttribute('data-v'),10);
+    if(key==='shade') updateMatEnabled();
+  });
+}
+segGroup('channel','channel');
+segGroup('shade','shade');
+segGroup('edgeMode','edgeMode');
+segGroup('recMode','recMode');
+$('recMode').addEventListener('click', updateRecEnabled);
+
+function updateRecEnabled(){
+  var m = P.recMode;
+  var oct = (m===1||m===3), dro = (m===2||m===3);
+  var set = function(id,on){ var el=$(id); if(el) el.disabled = !on; };
+  set('depth', oct); set('recRot', oct); set('persist', oct);
+  set('driftX', oct); set('driftY', oct);
+  set('twist', dro);
+  set('ratio', oct||dro);
+}
+$('edgeMode').addEventListener('click', updateEdgeEnabled);
+$('lineColor').addEventListener('input', function(){ P.lineColor = this.value; });
+
+function updateEdgeEnabled(){
+  var m = P.edgeMode;
+  var bands = (m===1||m===3), lines = (m===2||m===3);
+  var set = function(id,on){ var el=$(id); if(el) el.disabled = !on; };
+  set('levels', bands||lines);
+  set('softness', bands);
+  set('lineWidth', lines);
+  set('lineOpacity', lines);
+}
+
+$('res').addEventListener('click', function(ev){
+  var b=ev.target.closest('button'); if(!b) return;
+  [].forEach.call(this.querySelectorAll('button'), function(x){x.classList.remove('on');});
+  b.classList.add('on');
+  buildField(parseInt(b.getAttribute('data-v'),10), 'random');
+});
+
+presetSel.addEventListener('change', function(){
+  var p=PRESETS[parseInt(this.value,10)];
+  P.feed=p[1]; P.kill=p[2];
+  $('presetTag').textContent = p[0].toLowerCase();
+  syncChem(); padDraw();
+});
+
+matSel.addEventListener('change', function(){
+  var m = MATERIALS[parseInt(this.value,10)][1];
+  for(var k in m){ if(Object.prototype.hasOwnProperty.call(m,k)) P[k]=m[k]; }
+  syncMaterial();
+});
+
+function syncChem(){
+  $('feed').value=P.feed; $('feedVal').textContent=f4(P.feed);
+  $('kill').value=P.kill; $('killVal').textContent=f4(P.kill);
+}
+function syncMaterial(){
+  var keys=['relief','lightAz','lightEl','gloss','ambient','ao','sss'];
+  keys.forEach(function(k){
+    var el=$(k); if(!el) return;
+    el.value=P[k];
+    var out=$(k+'Val'); if(!out) return;
+    out.textContent = (k==='lightAz'||k==='lightEl') ? deg(P[k]) : f2(P[k]);
+  });
+}
+function updateMatEnabled(){
+  var keys=['relief','lightAz','lightEl','gloss','ambient','ao','sss'];
+  keys.forEach(function(k){ var el=$(k); if(el) el.disabled = (P.shade===0); });
+}
+
+$('seed').addEventListener('click', function(){ uploadInit('random'); });
+$('clear').addEventListener('click', function(){ uploadInit('blank'); });
+$('play').addEventListener('click', function(){ P.running=!P.running; this.textContent=P.running?'Pause':'Play'; });
+$('panelToggle').addEventListener('click', function(){ $('panel').classList.toggle('open'); });
+
+// ------------------------------------------------------------------ image loading
+function loadImageFile(file){
+  if(!file || !/^image\//.test(file.type)) return;
+  var url = URL.createObjectURL(file);
+  var im = new Image();
+  im.onload = function(){
+    imgEl = im;
+    rasterizeImage(RES);
+    $('thumb').src = url;
+    $('imgMeta').textContent = im.naturalWidth+'×'+im.naturalHeight;
+    $('imgPanel').style.display='';
+    $('dropZone').textContent = 'Replace image';
+    uploadInit('image');
+  };
+  im.onerror = function(){
+    $('dropZone').textContent = "Couldn't read that file. Try a PNG or JPG.";
+    URL.revokeObjectURL(url);
+  };
+  im.src = url;
+}
+$('dropZone').addEventListener('click', function(){ $('fileIn').click(); });
+$('fileIn').addEventListener('change', function(){ if(this.files && this.files[0]) loadImageFile(this.files[0]); });
+['dragenter','dragover'].forEach(function(evn){
+  $('dropZone').addEventListener(evn, function(e){ e.preventDefault(); this.classList.add('over'); });
+});
+['dragleave','drop'].forEach(function(evn){
+  $('dropZone').addEventListener(evn, function(e){ e.preventDefault(); this.classList.remove('over'); });
+});
+$('dropZone').addEventListener('drop', function(e){
+  if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) loadImageFile(e.dataTransfer.files[0]);
+});
+$('imgClear').addEventListener('click', function(){
+  clearImage();
+  $('imgPanel').style.display='none';
+  $('dropZone').textContent='Drop an image here, or click to choose';
+  $('fileIn').value='';
+});
+$('seedImg').addEventListener('click', function(){ uploadInit('image'); });
+
+// ------------------------------------------------------------------ export
+$('saveBtn').addEventListener('click', function(){
+  var scale=P.exp|0;
+  var w=vw*scale, h=vh*scale;
+  var etex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, etex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  var efbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, efbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, etex, 0);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE){
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.deleteFramebuffer(efbo); gl.deleteTexture(etex);
+    alert('Export size too large for this device. Try a smaller scale.'); return;
+  }
+  display(efbo, w, h);
+  var pix=new Uint8Array(w*h*4);
+  gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,pix);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.deleteFramebuffer(efbo); gl.deleteTexture(etex);
+  var c2=document.createElement('canvas'); c2.width=w; c2.height=h;
+  var ctx=c2.getContext('2d'); var img=ctx.createImageData(w,h);
+  for(var y=0;y<h;y++){ var sy=(h-1-y); for(var x=0;x<w;x++){
+    var si=(sy*w+x)*4, di=(y*w+x)*4;
+    img.data[di]=pix[si]; img.data[di+1]=pix[si+1]; img.data[di+2]=pix[si+2]; img.data[di+3]=255;
+  }}
+  ctx.putImageData(img,0,0);
+  c2.toBlob(function(b){
+    var a=document.createElement('a'); a.href=URL.createObjectURL(b);
+    a.download='petri_'+Date.now()+'.png'; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+  }, 'image/png');
+});
+
+// keyboard
+window.addEventListener('keydown', function(e){
+  var tn = e.target.tagName;
+  if(tn==='INPUT'||tn==='SELECT'||tn==='TEXTAREA') return;
+  if(e.key===' '){ e.preventDefault(); $('play').click(); }
+  else if(e.key==='r'||e.key==='R'){ uploadInit('random'); }
+  else if(e.key==='c'||e.key==='C'){ uploadInit('blank'); }
+  else if(e.key==='s'||e.key==='S'){ $('saveBtn').click(); }
+  else if(e.key==='l'||e.key==='L'){
+    P.shade = P.shade ? 0 : 1;
+    [].forEach.call($('shade').querySelectorAll('button'), function(b){
+      b.classList.toggle('on', parseInt(b.getAttribute('data-v'),10)===P.shade);
+    });
+    updateMatEnabled();
+  }
+});
+
+canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); });
+
+// ------------------------------------------------------------------ boot
+resize();
+buildLUT();
+gradDraw();
+document.getElementById('stopColor').value = stops[0].c;
+buildField(RES, 'random');
+padDraw();
+syncAll();
+syncMaterial();
+updateMatEnabled();
+updateEdgeEnabled();
+updateRecEnabled();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
