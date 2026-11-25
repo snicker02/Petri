@@ -471,6 +471,7 @@
           <button id="clear">Clear</button>
           <button id="play" class="wide primary">Pause</button>
           <button id="saveBtn" class="wide">Save PNG</button>
+          <button id="shelfBtn" class="wide" title="Shared image shelf: send this frame to another snicker02 app, or load an image from it">⇄ Shelf</button>
         </div>
         <div class="row" style="margin-top:10px">
           <label>Export scale <span class="val" id="expVal">2×</span></label>
@@ -482,6 +483,7 @@
   </aside>
 </div>
 
+<script src="https://snicker02.github.io/shared/bridge.js"></script>
 <script>
 "use strict";
 (function(){
@@ -1481,8 +1483,9 @@ $('imgClear').addEventListener('click', function(){
 $('seedImg').addEventListener('click', function(){ uploadInit('image'); });
 
 // ------------------------------------------------------------------ export
-$('saveBtn').addEventListener('click', function(){
-  var scale=P.exp|0;
+// render the current state at an integer scale into a 2D canvas (null if too large)
+function renderPNG(scale){
+  scale=Math.max(1,scale|0);
   var w=vw*scale, h=vh*scale;
   var etex=gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, etex);
@@ -1496,7 +1499,7 @@ $('saveBtn').addEventListener('click', function(){
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, etex, 0);
   if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE){
     gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.deleteFramebuffer(efbo); gl.deleteTexture(etex);
-    alert('Export size too large for this device. Try a smaller scale.'); return;
+    return null;
   }
   display(efbo, w, h);
   var pix=new Uint8Array(w*h*4);
@@ -1510,12 +1513,32 @@ $('saveBtn').addEventListener('click', function(){
     img.data[di]=pix[si]; img.data[di+1]=pix[si+1]; img.data[di+2]=pix[si+2]; img.data[di+3]=255;
   }}
   ctx.putImageData(img,0,0);
+  return c2;
+}
+$('saveBtn').addEventListener('click', function(){
+  var c2=renderPNG(P.exp|0);
+  if(!c2){ alert('Export size too large for this device. Try a smaller scale.'); return; }
   c2.toBlob(function(b){
     var a=document.createElement('a'); a.href=URL.createObjectURL(b);
     a.download='petri_'+Date.now()+'.png'; a.click();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
   }, 'image/png');
 });
+
+// shared image shelf (snicker02.github.io/shared/bridge.js)
+if(window.SnickerShelf){
+  window.SnickerShelf.mount({
+    app: 'Petri',
+    button: $('shelfBtn'),
+    onImage: function(file){ loadImageFile(file); },
+    getImage: function(){
+      var c2=renderPNG(1);
+      if(!c2) throw new Error('could not read the frame');
+      return new Promise(function(res,rej){ c2.toBlob(function(b){ b?res(b):rej(new Error('encode failed')); }, 'image/png'); });
+    },
+    getMeta: function(){ return { name: 'petri_'+Date.now()+'.png' }; }
+  });
+} else $('shelfBtn').hidden = true;
 
 // keyboard
 window.addEventListener('keydown', function(e){
